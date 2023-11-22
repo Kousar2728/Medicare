@@ -1,0 +1,3688 @@
+Medicare
+
+package com.medicare;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class MedicareApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(MedicareApplication.class, args);
+		System.out.println("Server Started...");
+	}
+
+}
+
+
+
+
+package com.medicare.configuration;
+
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+@Configuration
+public class MyConfig implements WebMvcConfigurer {
+
+    @Override
+    public void addCorsMappings(CorsRegistry registry) {
+        registry.addMapping("/**")
+                .allowedOrigins("http://localhost:4200")
+                .allowedMethods("GET", "POST", "PUT", "DELETE");
+    }
+
+}
+
+
+
+
+package com.medicare.controller;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.medicare.entity.Cart;
+import com.medicare.entity.CartItem;
+import com.medicare.entity.Medicine;
+import com.medicare.services.CartService;
+
+@RestController
+@RequestMapping("/cart")
+@CrossOrigin(origins = "http://localhost:4200")
+public class CartController {
+
+	@Autowired
+	private CartService cartService;
+
+	@GetMapping("/{userId}")
+	public ResponseEntity<Cart> getCartByUserId(@PathVariable Integer userId) {
+		Cart cart = cartService.getCartByUserId(userId);
+		return ResponseEntity.ok(cart);
+	}
+
+	@PostMapping("/{cartId}/add")
+	public ResponseEntity<CartItem> addMedicineToCart(@PathVariable Integer cartId, @RequestBody Medicine medicine,
+			@RequestParam int quantity) {
+
+		CartItem cartItem = cartService.addMedicineToCart(cartId, medicine, quantity);
+		return ResponseEntity.ok(cartItem);
+	}
+
+}
+
+
+
+package com.medicare.controller;
+
+import java.util.List;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.medicare.entity.Category;
+import com.medicare.services.CategoryService;
+
+
+@RestController
+@RequestMapping("/categories")
+@CrossOrigin(origins = "http://localhost:4200")
+public class CategoryController {
+
+    @Autowired
+    private CategoryService categoryService;
+    
+    @GetMapping("/categories")
+    public ResponseEntity<List<Category>> getAllCategories() {
+    	List<Category> users = categoryService.getAllCategories();
+		return new ResponseEntity<>(users, HttpStatus.OK);
+    }
+
+    @PostMapping
+    public ResponseEntity<Category> addCategory(@RequestBody Category category) {
+        Category newCategory = categoryService.addCategory(category);
+        return new ResponseEntity<>(newCategory, HttpStatus.CREATED);
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<Category> updateCategory(@PathVariable int id, @RequestBody Category category) {
+        Category updatedCategory = categoryService.updateCategory(category);
+        return new ResponseEntity<>(updatedCategory, HttpStatus.OK);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteCategory(@PathVariable Integer id) {
+        categoryService.deleteCategory(id);
+        return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+    }
+    
+    @GetMapping("/{id}")
+    public ResponseEntity<Category> getCategoryById(@PathVariable Integer id) {
+        Category category = categoryService.getCategoryById(id);
+        if (category == null) {
+            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        }
+        return new ResponseEntity<>(category, HttpStatus.OK);
+    }
+
+}
+
+
+
+package com.medicare.controller;
+
+import java.util.HashMap;
+import java.util.*;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.medicare.entity.LoginRequest;
+import com.medicare.entity.User;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
+import com.medicare.services.UserService;
+import com.medicare.validator.EmailValidator;
+
+@RestController
+@RequestMapping("/user")
+@CrossOrigin(origins = "http://localhost:4200", allowCredentials = "true")
+public class LoginController {
+
+	@Autowired
+	private UserService userService;
+
+	@PostMapping("/login")
+	public ResponseEntity<Map<String, Object>> login(HttpServletRequest request,
+			@RequestBody LoginRequest loginRequest) {
+
+		Map<String, Object> response = new HashMap<>();
+
+		String emailId = loginRequest.getEmailId();
+		String password = loginRequest.getPassword();
+
+		if (EmailValidator.isValid(emailId)) {
+			User user = (User) userService.authenticate(emailId, password);
+
+			if (user != null) {
+				String userRole;
+
+				if (user.getDiscriminatorValue().equals("Admin")) {
+					userRole = "admin";
+					System.out.println("Login endpoint hit with email: " + loginRequest.getEmailId());
+
+				} else {
+					userRole = "customer";
+					System.out.println("Login endpoint hit with email: " + loginRequest.getEmailId());
+
+				}
+				response.put("role", userRole);
+				HttpSession session = request.getSession();
+				session.setAttribute("userEmailId", emailId);
+				session.setAttribute("userName", user.getFirstname());
+
+				return ResponseEntity.ok(response);
+			} else {
+				response.put("errorMessage", "Invalid Credentials");
+				return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+			}
+		} else {
+			response.put("errorMessage", "Invalid email id");
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+		}
+	}
+
+	@GetMapping("/current")
+	public ResponseEntity<UserInfo> getCurrentUser(HttpSession session) {
+		String userEmailId = (String) session.getAttribute("userEmailId");
+		String userName = (String) session.getAttribute("userName");
+
+		if (userEmailId == null || userName == null) {
+			return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+		}
+
+		UserInfo userInfo = new UserInfo();
+		userInfo.setEmailId(userEmailId);
+		userInfo.setFirstname(userName);
+		return ResponseEntity.ok(userInfo);
+	}
+
+	static class UserInfo {
+		private String emailId;
+		private String firstname;
+
+		public String getEmailId() {
+			return emailId;
+		}
+
+		public void setEmailId(String emailId) {
+			this.emailId = emailId;
+		}
+
+		public String getFirstname() {
+			return firstname;
+		}
+
+		public void setFirstname(String firstname) {
+			this.firstname = firstname;
+		}
+	}
+
+	@GetMapping("/logout")
+	public ResponseEntity<String> logout(HttpSession session) {
+		session.invalidate();
+		return ResponseEntity.ok("Logged out successfully");
+	}
+
+}
+
+
+
+package com.medicare.controller;
+
+import java.io.IOException;
+import java.util.List;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+
+import com.medicare.entity.Category;
+import com.medicare.entity.Medicine;
+import com.medicare.services.CategoryService;
+import com.medicare.services.MedicineService;
+
+
+//import org.slf4j.Logger;
+//import org.slf4j.LoggerFactory;
+
+
+@RestController
+@RequestMapping("/medicines")
+@CrossOrigin(origins = "http://localhost:4200")
+public class MedicineController {
+
+	@Autowired
+	private MedicineService medicineService;
+	
+	@Autowired
+	private CategoryService categoryService;
+	
+ 
+	// Get all medicines
+	@GetMapping
+	public ResponseEntity<List<Medicine>> getAllMedicines() {
+		List<Medicine> medicines = medicineService.getAllMedicines();
+		return new ResponseEntity<>(medicines, HttpStatus.OK);
+	}
+
+	// Get medicine by ID
+	@GetMapping("/{id}")
+	public ResponseEntity<Medicine> getMedicineById(@PathVariable Integer id) {
+		Medicine medicine = medicineService.getMedicineById(id);
+		return new ResponseEntity<>(medicine, HttpStatus.OK);
+	}
+
+	// Add a new medicine
+	@PostMapping
+	    public ResponseEntity<Medicine> addMedicine(
+	        @RequestParam String name,
+	        @RequestParam String description,
+	        @RequestParam String brand,
+	        @RequestParam Integer availableQuantity,
+	        @RequestParam float price,
+	        @RequestParam Integer categoryId,
+	        @RequestParam boolean isActive,
+	        @RequestParam(name = "image", required = false) MultipartFile imageFile
+	    ) throws IOException {
+		
+//		final Logger logger = LoggerFactory.getLogger(MedicineController.class);		
+		
+		try {
+	        Medicine medicine = new Medicine();
+	        medicine.setName(name);
+	        medicine.setDescription(description);
+	        medicine.setBrand(brand);
+	        medicine.setAvailableQuantity(availableQuantity);
+	        medicine.setPrice(price);
+	        medicine.setActive(isActive);
+
+	        // For category
+	        Category category = categoryService.getCategoryById(categoryId);
+	        medicine.setCategory(category);
+
+	        // For image
+//	        String originalFilename = imageFile.getOriginalFilename();
+//	        String extension = originalFilename.substring(originalFilename.lastIndexOf("."));
+//	        String randomID = UUID.randomUUID().toString();
+//	        String newImageName = randomID + extension;
+	                	        
+	        if (imageFile != null) {
+	            medicine.setImage(imageFile.getBytes());
+	        }
+
+	        Medicine savedMedicine = medicineService.saveMedicine(medicine);
+	        System.out.println(name);
+	        System.out.println(description);
+//	        System.out.println(newImageName);
+	        return new ResponseEntity<>(savedMedicine, HttpStatus.CREATED);
+	    }catch(Exception e){
+//	    	logger.error("Error while inserting data: ", e);
+	        throw e;
+	    }
+		
+		
+	}
+
+	// Update a medicine
+	@PostMapping(value = "/{id}")
+    public ResponseEntity<?> updateMedicine(
+    		@PathVariable("id") Integer id,
+            @RequestParam("name") String name,
+            @RequestParam("description") String description,
+            @RequestParam("brand") String brand,
+            @RequestParam("availableQuantity") Integer availableQuantity,
+            @RequestParam("price") float price,
+            @RequestParam("category") Category category,
+            @RequestParam("isActive") Boolean isActive,
+            @RequestParam(name = "image", required = false) MultipartFile imageFile) {
+    		try {
+            Medicine updatedMedicine = medicineService.updateMedicine(
+            		id, 
+            		name, 
+            		description, 
+            		brand, 
+            		availableQuantity, 
+            		price, 
+            		category, 
+            		isActive, 
+            		imageFile);
+            return new ResponseEntity<>(updatedMedicine, HttpStatus.OK);
+        } catch (Exception e) {
+            return new ResponseEntity<>(e.getMessage(), HttpStatus.BAD_REQUEST);
+        }
+    }	
+	
+
+	
+	// Delete a medicine
+	@DeleteMapping("/{id}")
+	public ResponseEntity<Void> deleteMedicine(@PathVariable Integer id) {
+		medicineService.deleteMedicine(id);
+		return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+	}
+	
+	
+	@GetMapping("/category/{categoryName}")
+    public ResponseEntity<List<Medicine>> getMedicinesByCategoryName(@PathVariable String categoryName) {
+        List<Medicine> medicines = medicineService.getMedicinesByCategoryName(categoryName);
+        return ResponseEntity.ok(medicines);
+    }
+
+}
+
+
+
+package com.medicare.controller;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.medicare.entity.Order;
+import com.medicare.entity.OrderRequest;
+import com.medicare.entity.User;
+import com.medicare.services.OrderService;
+
+@RestController
+@RequestMapping("/order")
+@CrossOrigin(origins = "http://localhost:4200")
+public class OrderController {
+	
+	 @Autowired
+	    private OrderService orderService;
+	    
+	    @PostMapping("/place")
+	    public ResponseEntity<Order> placeOrder(@RequestBody OrderRequest orderRequest) {
+	        User user =new User() ;
+	        user.setId(1);
+	        
+	        Order order = orderService.placeOrder(user, orderRequest.getItems());
+	        
+	        return ResponseEntity.ok(order);
+	    }
+
+}
+
+
+
+package com.medicare.controller;
+
+import java.util.List;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.medicare.entity.User;
+import com.medicare.services.UserService;
+
+@CrossOrigin("http://localhost:4200")
+@RestController
+@RequestMapping("/user")
+public class UserController {
+
+	@Autowired
+	private UserService userService;
+
+	@PostMapping("/register")
+	public ResponseEntity<User> adduser(@RequestBody User u) {
+
+		User user = userService.register(u);
+		System.out.println(user);
+
+		if (user != null) {
+			return new ResponseEntity<User>(user, HttpStatus.CREATED);
+		} else {
+			return new ResponseEntity<User>(user, HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+
+	}
+
+	@GetMapping("/viewallusers")
+	public ResponseEntity<List<User>> getAllUsers() {
+		List<User> users = userService.getAllUser();
+		return new ResponseEntity<>(users, HttpStatus.OK);
+	}
+
+	@GetMapping("/{id}")
+	public ResponseEntity<User> getUserById(@PathVariable int id) {
+		User user = userService.getUserById(id);
+
+		if (user != null) {
+			return new ResponseEntity<User>(user, HttpStatus.OK);
+		} else {
+			return new ResponseEntity<User>(user, HttpStatus.NOT_FOUND);
+		}
+	}
+
+	@PutMapping("/{id}")
+	public ResponseEntity<Object> updateUser(@PathVariable int id, @RequestBody User newUser) {
+		User user = userService.updateUser(id, newUser);
+
+		if (user != null) {
+			return new ResponseEntity<Object>(user, HttpStatus.OK);
+		} else {
+			return new ResponseEntity<Object>("No User Available to Update", HttpStatus.NOT_FOUND);
+		}
+	}
+
+	@DeleteMapping("/{id}")
+	public ResponseEntity<String> deleteUser(@PathVariable int id) {
+		boolean result = userService.deleteUser(id);
+		if (result) {
+			return new ResponseEntity<String>("Object Deleted", HttpStatus.OK);
+		} else {
+			return new ResponseEntity<String>("NO user Found", HttpStatus.NOT_FOUND);
+		}
+	}
+
+}
+
+
+package com.medicare.entity;
+
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OneToOne;
+
+import java.util.*;
+
+@Entity
+public class Cart {
+
+	  @Id
+	    @GeneratedValue(strategy = GenerationType.IDENTITY)
+	    private int id;
+	    
+	    @OneToOne
+	    private User user;
+	    
+	    @OneToMany(mappedBy = "cart", cascade = CascadeType.ALL)
+	    private List<CartItem> cartItems = new ArrayList<>();
+
+		public int getId() {
+			return id;
+		}
+
+		public void setId(int id) {
+			this.id = id;
+		}
+
+		public User getUser() {
+			return user;
+		}
+
+		public void setUser(User user) {
+			this.user = user;
+		}
+
+		public List<CartItem> getCartItems() {
+			return cartItems;
+		}
+
+		public void setCartItems(List<CartItem> cartItems) {
+			this.cartItems = cartItems;
+		}
+	    
+	    
+}
+
+
+package com.medicare.entity;
+
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToOne;
+
+@Entity
+public class CartItem {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne
+    @JoinColumn(name = "cart_id")
+    private Cart cart;
+
+    @OneToOne
+    private Medicine medicine;
+
+    private int quantity;
+
+	public Long getId() {
+		return id;
+	}
+
+	public void setId(Long id) {
+		this.id = id;
+	}
+
+	public Cart getCart() {
+		return cart;
+	}
+
+	public void setCart(Cart cart) {
+		this.cart = cart;
+	}
+
+	public Medicine getMedicine() {
+		return medicine;
+	}
+
+	public void setMedicine(Medicine medicine) {
+		this.medicine = medicine;
+	}
+
+	public int getQuantity() {
+		return quantity;
+	}
+
+	public void setQuantity(int quantity) {
+		this.quantity = quantity;
+	}  
+
+}
+
+
+package com.medicare.entity;
+
+import java.util.List;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
+
+@Entity
+public class Category {
+
+	@Id
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
+	@Column(name = "categoryid")
+	private int id;
+	private String name;
+	private String description;
+
+	@OneToMany(mappedBy = "category")
+	private List<Medicine> medicines;
+
+	public Category(Integer id, String name, String description) {
+		super();
+		this.id = id;
+		this.name = name;
+		this.description = description;
+	}
+
+	public Category() {
+		super();
+		// TODO Auto-generated constructor stub
+	}
+
+	public int getId() {
+		return id;
+	}
+
+	public void setId(int id) {
+		this.id = id;
+	}
+
+	public String getName() {
+		return name;
+	}
+
+	public void setName(String name) {
+		this.name = name;
+	}
+
+	public String getDescription() {
+		return description;
+	}
+
+	public void setDescription(String description) {
+		this.description = description;
+	}
+
+	@Override
+	public String toString() {
+		return "Category [id=" + id + ", name=" + name + ", description=" + description + "]";
+	}
+
+}
+
+
+
+
+package com.medicare.entity;
+public class LoginRequest {
+	
+	private String emailId;
+private String password;
+	public String getEmailId() {
+		return emailId;
+	}
+	public void setEmailId(String emailId) {
+		this.emailId = emailId;
+	}
+	public String getPassword() {
+		return password;
+	}
+	public void setPassword(String password) {
+		this.password = password;
+	}
+}
+
+package com.medicare.entity;
+
+import java.util.Arrays;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.Lob;
+import jakarta.persistence.ManyToOne;
+
+@Entity
+public class Medicine {
+
+	@Id
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
+	private Integer id;
+
+	@Column
+	private String name;
+
+	@Column
+	private String description;
+
+	@Column
+	private String brand;
+
+	@Column(name = "available_quantity")
+	private Integer availableQuantity;
+
+	@Column
+	private float price;
+
+	@ManyToOne
+	@JoinColumn(name = "categoryid")
+	private Category category;
+
+	@Column(name = "is_active")
+	private boolean isActive;
+
+	@Lob
+	@Column(name = "image_data", columnDefinition = "MEDIUMBLOB")
+	private byte[] image;
+
+	@Column(name = "quantity_in_cart")
+	private Integer quantityInCart;
+
+	public Medicine(Integer quantityInCart) {
+		this.quantityInCart = quantityInCart;
+	}
+
+	public Medicine(Integer id, String name, String description, String brand, Integer availableQuantity, float price,
+			Category category, boolean isActive, byte[] image) {
+		super();
+		this.id = id;
+		this.name = name;
+		this.description = description;
+		this.brand = brand;
+		this.availableQuantity = availableQuantity;
+		this.price = price;
+		this.category = category;
+		this.isActive = isActive;
+		this.image = image;
+	}
+
+	public Medicine() {
+		super();
+		// TODO Auto-generated constructor stub
+	}
+
+	public Integer getId() {
+		return id;
+	}
+
+	public void setId(Integer id) {
+		this.id = id;
+	}
+
+	public String getName() {
+		return name;
+	}
+
+	public void setName(String name) {
+		this.name = name;
+	}
+
+	public String getDescription() {
+		return description;
+	}
+
+	public void setDescription(String description) {
+		this.description = description;
+	}
+
+	public String getBrand() {
+		return brand;
+	}
+
+	public void setBrand(String brand) {
+		this.brand = brand;
+	}
+
+	public Integer getAvailableQuantity() {
+		return availableQuantity;
+	}
+
+	public void setAvailableQuantity(Integer availableQuantity) {
+		this.availableQuantity = availableQuantity;
+	}
+
+	public float getPrice() {
+		return price;
+	}
+
+	public void setPrice(float price) {
+		this.price = price;
+	}
+
+	public Category getCategory() {
+		return category;
+	}
+
+	public void setCategory(Category category) {
+		this.category = category;
+	}
+
+	public boolean isActive() {
+		return isActive;
+	}
+
+	public void setActive(boolean isActive) {
+		this.isActive = isActive;
+	}
+
+	public byte[] getImage() {
+		return image;
+	}
+
+	public void setImage(byte[] image) {
+		this.image = image;
+	}
+
+	public Integer getQuantityInCart() {
+		return quantityInCart;
+	}
+
+	public void setQuantityInCart(Integer quantityInCart) {
+		this.quantityInCart = quantityInCart;
+	}
+
+	@Override
+	public String toString() {
+		return "Medicine [id=" + id + ", name=" + name + ", description=" + description + ", brand=" + brand
+				+ ", availableQuantity=" + availableQuantity + ", price=" + price + ", category=" + category
+				+ ", isActive=" + isActive + ", image=" + Arrays.toString(image) + "]";
+	}
+
+}
+
+
+
+package com.medicare.entity;
+
+import java.time.LocalDateTime;
+
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+
+import java.util.*;
+
+@Entity
+public class Order {
+
+	@Id
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
+	private int id;
+
+	@ManyToOne
+	@JoinColumn(name = "user_id")
+	private User user;
+
+	@OneToMany(mappedBy = "order", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+	private List<OrderItem> orderItems = new ArrayList<>();
+
+	private LocalDateTime orderDate;
+
+	public Integer getId() {
+		return id;
+	}
+
+	public void setId(Integer id) {
+		this.id = id;
+	}
+
+	public User getUser() {
+		return user;
+	}
+
+	public void setUser(User user) {
+		this.user = user;
+	}
+
+	public List<OrderItem> getOrderItems() {
+		return orderItems;
+	}
+
+	public void setOrderItems(List<OrderItem> orderItems) {
+		this.orderItems = orderItems;
+	}
+
+	public LocalDateTime getOrderDate() {
+		return orderDate;
+	}
+
+	public void setOrderDate(LocalDateTime orderDate) {
+		this.orderDate = orderDate;
+	}
+
+	public Order(Integer id, User user, List<OrderItem> orderItems, LocalDateTime orderDate) {
+		super();
+		this.id = id;
+		this.user = user;
+		this.orderItems = orderItems;
+		this.orderDate = orderDate;
+	}
+
+	public Order() {
+		super();
+		// TODO Auto-generated constructor stub
+	}
+
+}
+
+
+
+package com.medicare.entity;
+
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+
+@Entity
+public class OrderItem {
+
+	@Id
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
+	private int id;
+
+	@ManyToOne
+	@JoinColumn(name = "order_id")
+	private Order order;
+
+	@ManyToOne
+	@JoinColumn(name = "medicine_id")
+	private Medicine medicine;
+
+	private int quantity;
+
+	public OrderItem(int id, Order order, Medicine medicine, int quantity) {
+		super();
+		this.id = id;
+		this.order = order;
+		this.medicine = medicine;
+		this.quantity = quantity;
+	}
+
+	public OrderItem() {
+		super();
+		// TODO Auto-generated constructor stub
+	}
+
+	public int getId() {
+		return id;
+	}
+
+	public void setId(int id) {
+		this.id = id;
+	}
+
+	public Order getOrder() {
+		return order;
+	}
+
+	public void setOrder(Order order) {
+		this.order = order;
+	}
+
+	public Medicine getMedicine() {
+		return medicine;
+	}
+
+	public void setMedicine(Medicine medicine) {
+		this.medicine = medicine;
+	}
+
+	public int getQuantity() {
+		return quantity;
+	}
+
+	public void setQuantity(int quantity) {
+		this.quantity = quantity;
+	}
+
+}
+
+
+
+package com.medicare.entity;
+import java.util.List;
+public class OrderRequest {
+	
+private List<OrderItem> items;
+	public List<OrderItem> getItems() {
+		return items;
+	}
+	public void setItems(List<OrderItem> items) {
+		this.items = items;
+	}
+}
+
+
+package com.medicare.entity;
+
+import java.util.Date;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.DiscriminatorColumn;
+import jakarta.persistence.DiscriminatorType;
+import jakarta.persistence.DiscriminatorValue;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.persistence.Temporal;
+import jakarta.persistence.TemporalType;
+import jakarta.persistence.Transient;
+
+@Entity
+@Table(name = "user")
+@DiscriminatorColumn(discriminatorType = DiscriminatorType.STRING, name = "userRole")
+@DiscriminatorValue("customer")
+public class User {
+
+	@Id
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
+	private int id;
+
+	@Column
+	private String firstname;
+
+	@Column
+	private String lastname;
+
+	@Column
+	private String emailId;
+
+	@Column(length = 20)
+	private String password;
+
+	@Column
+	private String gender;
+
+	@Temporal(TemporalType.DATE)
+	private Date dateOfBirth;
+
+	public User(int id, String firstname, String lastname, String emailId, String password, String gender,
+			Date dateOfBirth) {
+		super();
+		this.id = id;
+		this.firstname = firstname;
+		this.lastname = lastname;
+		this.emailId = emailId;
+		this.password = password;
+		this.gender = gender;
+		this.dateOfBirth = dateOfBirth;
+	}
+
+	public User() {
+		super();
+		// TODO Auto-generated constructor stub
+	}
+
+	public User(String emailId2, String password2) {
+	}
+
+	public int getId() {
+		return id;
+	}
+
+	public void setId(int id) {
+		this.id = id;
+	}
+
+	public String getFirstname() {
+		return firstname;
+	}
+
+	public void setFirstname(String firstname) {
+		this.firstname = firstname;
+	}
+
+	public String getLastname() {
+		return lastname;
+	}
+
+	public void setLastname(String lastname) {
+		this.lastname = lastname;
+	}
+
+	public String getEmailId() {
+		return emailId;
+	}
+
+	public void setEmailId(String emailId) {
+		this.emailId = emailId;
+	}
+
+	public String getPassword() {
+		return password;
+	}
+
+	public void setPassword(String password) {
+		this.password = password;
+	}
+
+	public String getGender() {
+		return gender;
+	}
+
+	public void setGender(String gender) {
+		this.gender = gender;
+	}
+
+	public Date getDateOfBirth() {
+		return dateOfBirth;
+	}
+
+	public void setDateOfBirth(Date dateOfBirth) {
+		this.dateOfBirth = dateOfBirth;
+	}
+
+	
+	@Entity
+	@DiscriminatorValue("Admin")
+	public class Admin extends User {	
+		public Admin() {  
+			super();
+		}
+	}
+
+	@Transient
+	public String getDiscriminatorValue() {
+		return this.getClass().getAnnotation(DiscriminatorValue.class).value();
+	}
+
+}
+
+
+package com.medicare.entity;
+public class UserDTO {
+private String userType;
+	public String getUserType() {
+		return userType;
+	}
+	public void setUserType(String userType) {
+		this.userType = userType;
+	}
+}
+
+
+
+package com.medicare.repository;
+
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import com.medicare.entity.CartItem;
+
+@Repository
+public interface CartItemRepository extends JpaRepository<CartItem, Integer> {}
+
+package com.medicare.repository;
+
+import java.util.Optional;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import com.medicare.entity.Cart;
+
+@Repository
+public interface CartRepository extends JpaRepository<Cart, Integer>{
+	
+    Optional<Cart> findByUserId(Integer userId);
+    
+}
+
+
+package com.medicare.repository;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import com.medicare.entity.Category;
+
+@Repository
+public interface CategoryRepository extends JpaRepository<Category, Integer>{
+
+}
+
+
+package com.medicare.repository;
+
+
+import java.util.List;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import com.medicare.entity.Medicine;
+
+@Repository
+public interface MedicineRepository extends JpaRepository<Medicine, Integer>{
+
+	    List<Medicine> findByCategoryName(String categoryName);
+		
+}
+
+package com.medicare.repository;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import com.medicare.entity.Order;
+
+@Repository
+public interface OrderRepository  extends JpaRepository<Order, Integer>{
+
+}
+
+package com.medicare.repository;
+
+import java.util.List;
+import java.util.Optional;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.stereotype.Repository;
+
+import com.medicare.entity.User;
+
+@Repository
+public interface UserRepository extends JpaRepository<User, Integer> {
+
+	public User findByEmailIdAndPassword(String emailId, String password);
+
+	Optional<User> findByEmailId(String emailId);
+
+	List<User> findByfirstnameContaining(String firstname);
+
+	List<User> findByfirstnameContainingIgnoreCase(String firstname);
+
+	@Query("from User")
+	public List<User> getUsers();
+
+}
+
+package com.medicare.services;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import com.medicare.entity.Cart;
+import com.medicare.entity.CartItem;
+import com.medicare.entity.Medicine;
+import com.medicare.repository.CartItemRepository;
+import com.medicare.repository.CartRepository;
+
+@Service
+public class CartService {
+
+    @Autowired
+    private CartRepository cartRepository;
+
+    @Autowired
+    private CartItemRepository cartItemRepository;
+
+    public Cart getCartByUserId(Integer userId) {
+        return cartRepository.findByUserId(userId).orElse(new Cart());
+    }
+
+    public CartItem addMedicineToCart(Integer cartId, Medicine medicine, int quantity) {
+        Cart cart = cartRepository.findByUserId(cartId).orElse(new Cart());
+        CartItem cartItem = new CartItem();
+        cartItem.setCart(cart);
+        cartItem.setMedicine(medicine);
+        cartItem.setQuantity(quantity);
+        return cartItemRepository.save(cartItem);
+    }
+
+}
+
+
+package com.medicare.services;
+
+import java.util.List;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import com.medicare.entity.Category;
+import com.medicare.repository.CategoryRepository;
+
+@Service
+public class CategoryService {
+    
+    @Autowired
+    private CategoryRepository categoryRepository;
+
+    public Category addCategory(Category category) {
+        return categoryRepository.save(category);
+    }
+
+    public Category updateCategory(Category category) {
+        return categoryRepository.save(category);
+    }
+
+    public void deleteCategory(Integer id) {
+        categoryRepository.deleteById(id);
+    }
+
+    public List<Category> getAllCategories() {
+        return categoryRepository.findAll();
+    }
+
+    public Category getCategoryById(Integer id) {
+        return categoryRepository.findById(id).orElse(null);
+    }
+}
+
+package com.medicare.services;
+
+import java.util.List;
+import java.util.Optional;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+
+import com.medicare.entity.Category;
+import com.medicare.entity.Medicine;
+import com.medicare.repository.MedicineRepository;
+
+@Service
+public class MedicineService {
+
+    @Autowired
+    private MedicineRepository medicineRepository;
+
+
+    public List<Medicine> getAllMedicines() {
+        List<Medicine> medicines = medicineRepository.findAll();
+        for (Medicine medicine : medicines) {
+            if (medicine.getQuantityInCart() == null) {
+                medicine.setQuantityInCart(0);
+            }
+        }
+        return medicines;
+    }
+
+    public Medicine getMedicineById(Integer id) {
+        Optional<Medicine> medicineOptional = medicineRepository.findById(id);
+        if (medicineOptional.isPresent()) {
+            return medicineOptional.get();
+        }
+        // Handle the case when the medicine is not found
+        // This could be throwing an exception or returning null
+        return null;
+    }
+
+    public Medicine saveMedicine(Medicine medicine) {
+        return medicineRepository.save(medicine);
+    }
+
+    // @Transactional
+    public Medicine updateMedicine(Integer id,
+            String name,
+            String description,
+            String brand,
+            Integer availableQuantity,
+            float price,
+            Category category,
+            Boolean isActive,
+            MultipartFile imageFile) throws Exception {
+        Medicine medicine = medicineRepository.findById(id).orElse(null);
+
+        if (medicine == null) {
+            throw new Exception("Medicine not found with ID: " + id);
+        }
+
+        medicine.setName(name);
+        medicine.setDescription(description);
+        medicine.setBrand(brand);
+        medicine.setAvailableQuantity(availableQuantity);
+        medicine.setPrice(price);
+        medicine.setCategory(category);
+        medicine.setActive(isActive);
+
+        if (imageFile != null && !imageFile.isEmpty()) {
+            medicine.setImage(imageFile.getBytes());
+        }
+
+        return medicineRepository.save(medicine);
+    }
+
+    public void deleteMedicine(Integer id) {
+        medicineRepository.deleteById(id);
+    }
+    
+    
+    public List<Medicine> getMedicinesByCategoryName(String categoryName) {
+        return medicineRepository.findByCategoryName(categoryName);
+    }
+
+}
+
+package com.medicare.services;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import com.medicare.entity.Order;
+import com.medicare.entity.OrderItem;
+import com.medicare.entity.User;
+import com.medicare.repository.OrderRepository;
+
+@Service
+public class OrderService {
+
+	 @Autowired
+	    private OrderRepository orderRepository;
+
+	    public Order placeOrder(User user, List<OrderItem> orderItems) {
+	        Order order = new Order();
+	        order.setUser(user);
+	        order.setOrderItems(orderItems);
+	        order.setOrderDate(LocalDateTime.now());
+	        
+	        return orderRepository.save(order);
+	    }
+	
+}
+
+package com.medicare.services;
+
+import java.util.List;
+import java.util.Optional;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import com.medicare.entity.User;
+import com.medicare.repository.UserRepository;
+
+@Service
+public class UserService {
+
+	@Autowired
+	private UserRepository userRepository;
+
+	// Register new user / add new user
+	public User register(User user) {
+		return userRepository.save(user);
+	}
+
+
+	// Find user by user id
+	public User getUserById(int id) {
+		if (userRepository.findById(id).isPresent()) {
+			return userRepository.findById(id).get();
+		} else {
+			return null;
+		}
+	}
+
+	// To get all the users
+	public List<User> getAllUser() {
+		return userRepository.findAll();
+	}
+
+	// Update USer
+	public User updateUser(int id, User user) {
+		if (userRepository.findById(id).isPresent()) {
+			User updateUser = userRepository.findById(id).get();
+
+			updateUser.setFirstname(user.getFirstname());
+			updateUser.setLastname(user.getLastname());
+			updateUser.setEmailId(user.getEmailId());
+			updateUser.setPassword(user.getPassword());
+			updateUser.setGender(user.getGender());
+			updateUser.setDateOfBirth(user.getDateOfBirth());
+
+			return userRepository.save(updateUser);
+		} else {
+			return null;
+		}
+	}
+
+	// To delete User
+	public boolean deleteUser(int id) {
+		if (userRepository.findById(id).isPresent()) {
+			userRepository.deleteById(id);
+			return true;
+		} else {
+			return false;
+		}
+	}
+
+	public User findByEmailId(String emailId) {
+		return userRepository.findByEmailId(emailId).orElse(null);
+	}
+
+	public User authenticate(String emailId, String password) {
+		Optional<User> currentUser = userRepository.findByEmailId(emailId);
+		if (currentUser.isPresent() && currentUser.get().getPassword().equals(password)) {
+			return currentUser.get();
+		}
+		// return null;
+		return new User(emailId, password);
+	}
+
+}
+
+
+# ===============================
+# = DATA SOURCE
+# ===============================
+spring.datasource.url=jdbc:mysql://localhost:3306/medicare?useUnicode=true&useJDBCCompliantTimezoneShift=true&useLegacyDatetimeCode=false&serverTimezone=UTC&maxAllowedPacket=50000000
+spring.datasource.username=root
+spring.datasource.password=Redhat@1234.
+spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
+
+# ===============================
+# = JPA/Hibernate
+# ===============================
+spring.jpa.show-sql=true
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQLDialect
+spring.jpa.properties.hibernate.format_sql=true
+
+# Define naming strategy
+#spring.jpa.hibernate.naming-strategy=org.hibernate.cfg.ImprovedNamingStrategy
+#spring.jpa.properties.hibernate.id.new_generator_mappings=false
+
+# ===============================
+# = LOGGING
+# ===============================
+logging.level.org.springframework.web=DEBUG
+logging.level.org.hibernate=ERROR
+logging.level.org.hibernate.SQL=DEBUG
+logging.level.org.hibernate.type.descriptor.sql.BasicBinder=TRACE
+
+# ===============================
+# = MISC
+# ===============================
+server.port=9090
+
+
+
+
+FrontEnd:
+
+<!-- <p>addcategory works!</p> -->
+<br>
+<div class="col-md-7 m-auto">
+    <div class="card">
+        <div class="card-header text-light" style="background-color: teal;">
+            <h4>Add New Category</h4>
+        </div>
+        <div class="card-body">
+            <form (ngSubmit)="addCategory()">
+                <div>
+                    <label>Name:</label>
+                    <input class="form-control" [(ngModel)]="category.name" name="name" placeholder="Category Name"
+                        required>
+                </div><br>
+                <div>
+                    <label>Description:</label>
+                    <textarea class="form-control" [(ngModel)]="category.description" rows="4"
+                        placeholder="Write Medicine Description" name=" description"></textarea>
+                </div><br>
+
+                <div>
+                    <button class="btn btn-dark" type="submit">Add Category</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+import { Component } from '@angular/core';
+import { Category } from '../category';
+import { CategoryService } from '../category.service';
+import { Router } from '@angular/router';
+
+@Component({
+  selector: 'app-addcategory',
+  templateUrl: './addcategory.component.html',
+  styleUrls: ['./addcategory.component.css']
+})
+export class AddcategoryComponent {
+
+  category: Category = {
+    name: '',
+    description: ''
+  };
+
+  constructor(
+    private categoryService: CategoryService,
+    private router: Router
+  ) { }
+
+  addCategory(): void {
+    this.categoryService.addCategory(this.category).subscribe(data => {
+      console.log('Category added successfully!', data);
+      this.category = { name: '', description: '' };
+      this.router.navigate(["/categories"])
+    });
+  }
+
+}
+
+
+
+
+<!-- <p>addmedicine works!</p> -->
+
+<br>
+<div class="col-md-7 m-auto">
+    <div class="card">
+        <div class="card-header">
+            <h4>Add New Medicine</h4>
+        </div>
+        <div class="card-body">
+            <form (ngSubmit)="onSubmit()" #medicineForm="ngForm">
+                <div>
+                    <label for="name">Name:</label>
+                    <input class="form-control" type="text" id="name" [(ngModel)]="medicine.name" name="name" required>
+                </div>
+                <div>
+                    <label for="description">Description:</label>
+                    <textarea class="form-control" type="text" id="description" [(ngModel)]="medicine.description"
+                        name="description" required></textarea>
+                </div>
+                <div>
+                    <label for="brand">Brand:</label>
+                    <input class="form-control" type="text" id="brand" [(ngModel)]="medicine.brand" name="brand"
+                        required>
+                </div>
+                <div>
+                    <label for="availableQuantity">Available Quantity:</label>
+                    <input class="form-control" type="number" id="availableQuantity"
+                        [(ngModel)]="medicine.availableQuantity" name="availableQuantity" required>
+                </div>
+                <div>
+                    <label for="price">Price:</label>
+                    <input class="form-control" type="number" id="price" [(ngModel)]="medicine.price" name="price"
+                        required>
+                </div>
+                <div>
+                    <label for="category">Select Category:</label>
+                    <select class="form-select" id="category" [(ngModel)]="medicine.category" name="category" required>
+                        <option *ngFor="let category of categories" [value]="category.id">{{ category.name }}
+                        </option>
+                    </select>
+                </div>
+                <br>
+                <div class="border p-1">
+                    <label class="form-check-inline" for="isActive">Is Active : </label>
+                    <input class="form-check-input" type="checkbox" id="isActive" [(ngModel)]="medicine.isActive"
+                        name="isActive">
+                </div>
+                <br>
+                <div>
+                    <label for="image">Image:</label>
+                    <input class="form-control" type="file" id="image" (change)="onImageSelected($event)" name="image">
+                </div>
+                <br>
+                <div>
+                    <button class="btn btn-dark" type="submit">Add Medicine</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+
+import { Component } from '@angular/core';
+import { MedicineService } from '../medicine.service';
+import { Medicine } from '../medicine';
+import { Router } from '@angular/router';
+import { CategoryService } from '../category.service';
+import { Category } from '../category';
+import { HttpClient } from '@angular/common/http';
+
+
+@Component({
+  selector: 'app-addmedicine',
+  templateUrl: './addmedicine.component.html',
+  styleUrls: ['./addmedicine.component.css']
+})
+export class AddmedicineComponent {
+
+  categories: Category[] = [];
+
+  medicine: Medicine = new Medicine();
+
+  selectedImage: File | null = null;
+
+
+  constructor(
+    private medicineService: MedicineService,
+    private categoryService: CategoryService,
+    private router: Router,
+    private http: HttpClient
+  ) { }
+
+  ngOnInit(): void {
+    this.loadCategories();
+  }
+
+  loadCategories(): void {
+    this.categoryService.getAllCategories().subscribe(
+      data => {
+        this.categories = data;
+      },
+      error => {
+        console.error('Error loading categories!', error);
+      }
+    );
+  }
+
+
+  onImageSelected(event: any): void {
+    // this.selectedImage = event.target.files;
+    if (event.target.files.length > 0) {
+      this.selectedImage = event.target.files[0];
+    }
+  }
+
+  onSubmit(): void {
+    const formData: FormData = new FormData();
+    formData.append('name', this.medicine.name);
+    formData.append('description', this.medicine.description);
+    formData.append('brand', this.medicine.brand);
+    formData.append('availableQuantity', this.medicine.availableQuantity.toString());
+    formData.append('price', this.medicine.price.toString());
+    formData.append('categoryId', this.medicine.category.toString());
+    formData.append('isActive', this.medicine.isActive.toString());
+    if (this.selectedImage) {
+      formData.append('image', this.selectedImage, this.selectedImage.name);
+    }
+
+    this.medicineService.addMedicine(formData).subscribe(response => {
+      alert('Medicine added successfully!');
+    });
+  }
+
+}
+
+
+
+<!-- <p>adminhome works!</p> -->
+<br>
+
+<div class="container w-100 h-50 bg-body-secondary p-lg-5">
+    <h2>Welcome Admin</h2>
+    <br>
+    <p>"Welcome to the Medicare Admin Portal. Here, you have complete control over inventory management, customer
+        data, and sales tracking. Ensure timely stock replenishments, monitor transaction histories, and streamline
+        operations. Your one-stop hub for seamless healthcare product management. Stay organized and provide the best
+        service to your customers."</p>
+</div>
+<br>
+<br>
+<div class="container">
+    <div class="row">
+        <div class="col-md-3 me-5">
+            <div class="p-3 text-center rounded-end-pill" style="background-color: teal;">
+                <p class="fs-5 pt-2">
+                    <a routerLink="/categories" class="link-light link-underline-opacity-0">Category List</a>
+                </p>
+            </div>
+        </div>
+        <div class="col-md-3 me-5">
+            <div class="p-3 text-center rounded-end-pill" style="background-color: teal;">
+                <p class="fs-5 pt-2">
+                    <a routerLink="/medicinelist" class="link-light link-underline-opacity-0">Medicine List</a>
+                </p>
+            </div>
+        </div>
+        <div class="col-md-3 me-5">
+            <div class="p-3 text-center rounded-end-pill" style="background-color: teal;">
+                <p class="fs-5 pt-2">
+                    <a routerLink="/viewallusers" class="link-light link-underline-opacity-0">User List</a>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+<!-- <p>cart works!</p> -->
+<div>
+    <div>
+        <h4>Your Cart</h4>
+
+        <table class="table table-bordered text-center">
+            <thead class="text-center">
+                <tr>
+                    <th scope="col">Image</th>
+                    <th scope="col">Name</th>
+                    <!-- <th scope="col">Medicine Description</th> -->
+                    <th scope="col">Brand</th>
+                    <th scope="col">Price</th>
+                    <th scope="col">Category</th>
+                    <th scope="col">Quntity</th>
+                    <th scope="col">Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr *ngFor="let item of cartItems$">
+                    <td><img [src]="'data:image/jpeg;base64,' + item.image" alt="Medicine Image" width="120"></td>
+                    <td>{{item.name}}</td>
+                    <!-- <td>{{medicine.description}}</td> -->
+                    <td>{{item.brand}}</td>
+                    <td>&#8377;{{item.price}}/strip</td>
+                    <td>{{item.category.name}}</td>
+                    <td>{{item.quantityInCart}}</td>
+                    <td>{{item.price * item.quantityInCart}}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    <div>
+        <button class="btn btn-dark" routerLink="/order">Place Order</button>
+    </div>
+</div>
+
+
+
+import { Component } from '@angular/core';
+import { Medicine } from '../medicine';
+import { MedicineService } from '../medicine.service';
+import { ActivatedRoute, Router } from '@angular/router';
+import { CartService } from '../cart.service';
+
+@Component({
+  selector: 'app-cart',
+  templateUrl: './cart.component.html',
+  styleUrls: ['./cart.component.css']
+})
+export class CartComponent {
+
+  medicines: Medicine[] = [];
+  categoryName!: string;
+
+  cartItems$ = this.cartService.cart$;
+
+  constructor(
+    private cartService: CartService,
+    private medicineService: MedicineService,
+    private router: Router
+  ) { }
+
+  ngOnInit(): void { }
+
+  onRemoveItem(item: any) {
+    this.cartService.removeFromCart(item);
+  }
+
+  onSaveCart() {
+    this.cartService.saveCart().subscribe(response => {
+      alert('Medicine Added to cart..');
+    });
+  }
+
+  onPlaceOrder() {
+    this.cartService.placeOrder().subscribe(response => {
+      this.router.navigate(['/cutomer'])
+    });
+  }
+
+}
+
+
+
+
+<!-- <p>categorylist works!</p> -->
+<br>
+<div class="container col-md-11">
+    <div class="card">
+        <div class="card-header">
+            <h4>Category List</h4>
+        </div>
+
+        <div class="card-body">
+            <button class="btn btn-dark" routerLink="/addcategory">
+                Add Categories
+            </button><br><br>
+            <table class="table table-bordered table-sm table-hover">
+                <thead>
+                    <tr class="p-5">
+                        <th>No.</th>
+                        <th>Name</th>
+                        <th>Description</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr *ngFor="let category of categories | paginate:{itemsPerPage:8,currentPage:p}">
+                        <td>{{ category.id }}</td>
+                        <td>{{ category.name }}</td>
+                        <td>{{ category.description }}</td>
+                        <td>
+                            <div class="btn-group">
+                                <button class="btn btn-dark btn-sm rounded-pill" (click)="editCategory(category.id!)">
+                                    <i class="fas fa-pen"></i>
+                                </button>
+                                &nbsp;&nbsp;
+                                <button class="btn btn-danger btn-sm rounded-pill">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <pagination-controls (pageChange)="p = $event"></pagination-controls>
+
+        </div>
+    </div>
+</div>
+
+
+
+import { Component } from '@angular/core';
+import { Category } from '../category';
+import { CategoryService } from '../category.service';
+import { Router } from '@angular/router';
+
+@Component({
+  selector: 'app-categorylist',
+  templateUrl: './categorylist.component.html',
+  styleUrls: ['./categorylist.component.css']
+})
+export class CategorylistComponent {
+
+  categories: Category[] = [];
+  p: number = 0;
+
+  constructor(
+    private categoryService: CategoryService,
+    private router: Router
+  ) { }
+
+  ngOnInit(): void {
+    this.loadCategories();
+  }
+
+  loadCategories(): void {
+    this.categoryService.getAllCategories().subscribe(data => {
+      this.categories = data;
+      console.log(data);
+    });
+  }
+
+  editCategory(categoryId: number): void {
+    this.router.navigate(['/updatecategory', categoryId as number]);
+  }
+
+
+}
+
+
+
+<!-- <p>home works!</p> -->
+<br>
+<div id="carouselExampleCaptions" class="carousel slide">
+    <div class="carousel-indicators">
+        <button type="button" data-bs-target="#carouselExampleCaptions" data-bs-slide-to="0" class="active"
+            aria-current="true" aria-label="Slide 1"></button>
+        <button type="button" data-bs-target="#carouselExampleCaptions" data-bs-slide-to="1"
+            aria-label="Slide 2"></button>
+        <button type="button" data-bs-target="#carouselExampleCaptions" data-bs-slide-to="2"
+            aria-label="Slide 3"></button>
+    </div>
+    <div class="carousel-inner">
+        <div class="carousel-item active">
+            <img src="assets/images/img1.jpg" class="d-block w-100 h-50" alt="image not found...">
+            <div class="carousel-caption d-none d-md-block top-0">
+                <h3>Welcome To MediCare</h3>
+                <p>Your health, our priority. Delivering care to your doorstep. Your trusted medical store at home,
+                    always just a call away.</p>
+            </div>
+        </div>
+        <div class="carousel-item">
+            <img src="assets/images/img2.jpg" class="d-block w-100" alt="...">
+            <div class="carousel-caption d-none d-md-block">
+                <h5>Second slide label</h5>
+                <p>Some representative placeholder content for the second slide.</p>
+            </div>
+        </div>
+        <div class="carousel-item">
+            <img src="..." class="d-block w-100" alt="...">
+            <div class="carousel-caption d-none d-md-block">
+                <h5>Third slide label</h5>
+                <p>Some representative placeholder content for the third slide.</p>
+            </div>
+        </div>
+    </div>
+    <button class="carousel-control-prev" type="button" data-bs-target="#carouselExampleCaptions" data-bs-slide="prev">
+        <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+        <span class="visually-hidden">Previous</span>
+    </button>
+    <button class="carousel-control-next" type="button" data-bs-target="#carouselExampleCaptions" data-bs-slide="next">
+        <span class="carousel-control-next-icon" aria-hidden="true"></span>
+        <span class="visually-hidden">Next</span>
+    </button>
+</div>
+<br>
+<div>
+    <h4>Most Viewed Medicines</h4>
+</div>
+
+
+import { Component } from '@angular/core';
+
+@Component({
+  selector: 'app-home',
+  templateUrl: './home.component.html',
+  styleUrls: ['./home.component.css']
+})
+export class HomeComponent {
+
+}
+
+
+
+<!-- <p>login works!</p> -->
+<br>
+<div class="col-md-6 m-auto">
+    <div class="card">
+        <div class="card-header text-light p-3" style="background-color: teal;">
+            <h5>Login Here</h5>
+        </div>
+        <div class="card-body">
+            <p>Sign in to your account</p>
+            <form (ngSubmit)="onLogin()">
+                <div>
+                    Email:
+                    <input class="form-control" [(ngModel)]="email" name="emailId" type="email" required>
+                </div>
+                <div>
+                    Password:
+                    <input class="form-control" [(ngModel)]="password" name="password" type="password" required>
+                </div>
+                <br>
+                <div class="d-grid gap-2 mb-3">
+                    <button class="btn text-light" type="submit" style="background-color: teal;">Login</button>
+                </div>
+
+                <p class="mb-3 pb-lg-2" style="color: #393f81;">Don't have an account?
+                    <a routerLink="/register" style="color: #393f81;">Register here</a>
+                </p>
+
+            </form>
+
+        </div>
+    </div>
+</div>
+
+
+import { Component } from '@angular/core';
+import { AuthService } from '../auth.service';
+import { Router } from '@angular/router';
+import { User } from '../user';
+
+@Component({
+  selector: 'app-login',
+  templateUrl: './login.component.html',
+  styleUrls: ['./login.component.css']
+})
+export class LoginComponent {
+
+  email!: string;
+  password!: string;
+  errorMessage: string = '';
+
+  constructor(private authService: AuthService, private router: Router) { }
+
+  onLogin() {
+    this.authService.login(this.email, this.password).subscribe({
+      next: (data) => {
+        console.log('Logged in successfully', data);
+        if (data.role === 'admin') {
+          console.log('Navigating to admin dashboard');
+          this.router.navigate(['/admin']);
+        } else {
+          this.router.navigate(['/customer']);
+        }
+      },
+      error: error => {
+        console.error('Cannot login in', error);
+      },
+      // complete: () => {
+      //   console.log('Login Complete');
+      // }
+    });
+  }
+
+}
+
+
+
+
+<!-- <p>medicinelist works!</p> -->
+<h3 class="p-2">Medicine List</h3>
+<button class="btn btn-dark" routerLink="/addmedicine">
+    Add new Medicine
+</button>
+<br>
+<br>
+
+<table class="table table-bordered text-capitalize">
+    <thead class="text-center">
+        <tr>
+            <th>ID</th>
+            <th>Image</th>
+            <th>Name</th>
+            <th>Description</th>
+            <th>Brand</th>
+            <th>Available Quantity</th>
+            <th>Price</th>
+            <th>Category</th>
+            <th>Activate</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr *ngFor="let medicine of medicines">
+            <td>{{medicine.id}}</td>
+            <td><img [src]="'data:image/jpeg;base64,' + medicine.image" alt="Medicine Image" width="100"></td>
+            <td>{{medicine.name}}</td>
+            <td>{{medicine.description}}</td>
+            <td>{{medicine.brand}}</td>
+            <td>{{medicine.availableQuantity}}</td>
+            <td>&#8377;{{medicine.price}}/Strip</td>
+            <td>{{medicine.category.name}}</td>
+            <td>
+                <!-- <label class="switch">
+                    <input type="checkbox">
+                    <span class="slider round">{{ medicine.isActive ? 'Active' : 'Inactive' }}</span>
+                </label> -->
+
+                <button class="btn rounded-pill btn-sm" [class.btn-success]="medicine.isActive"
+                    [class.btn-danger]="!medicine.isActive" (click)="toggleActive(medicine)">
+                    {{ medicine.isActive ? 'Active' : 'Inactive' }}
+                </button>
+            </td>
+            <td>
+                <div class="btn-group">
+                    <button class="btn btn-dark btn-sm rounded-pill" (click)="updateMedicine(medicine.id!)">
+                        <i class="fas fa-pen"></i>
+                    </button>
+                    &nbsp;
+                    <button class="btn btn-danger btn-sm rounded-pill" (click)="deleteMedicine(medicine.id!)">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </div>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+
+
+import { Component } from '@angular/core';
+import { Medicine } from '../medicine';
+import { MedicineService } from '../medicine.service';
+import { Router } from '@angular/router';
+
+
+@Component({
+  selector: 'app-medicinelist',
+  templateUrl: './medicinelist.component.html',
+  styleUrls: ['./medicinelist.component.css']
+})
+export class MedicinelistComponent {
+
+  medicines: Medicine[] = [];
+
+  constructor(
+    private medicineService: MedicineService,
+    private router: Router
+  ) { }
+
+  ngOnInit(): void {
+    this.getAllMedicines();
+  }
+
+  getAllMedicines(): void {
+    this.medicineService.getAllMedicines().subscribe(medicines => this.medicines = medicines);
+  }
+
+  updateMedicine(id: number): void {
+    console.log('Update medicine with ID:', id);
+    this.router.navigate(['/updatemedicine', id]);
+  }
+
+  deleteMedicine(id: number): void {
+    if (confirm('Are you sure you want to delete this medicine?')) {
+      this.medicineService.deleteMedicine(id).subscribe(() => {
+        this.getAllMedicines();  // Refresh the list after deletion
+      });
+    }
+  }
+
+  toggleActive(medicine: Medicine): void {
+    medicine.isActive = !medicine.isActive;
+  }
+}
+
+
+
+
+<!-- <p>register works!</p> -->
+<br>
+<div class="col-md-7 m-auto">
+    <div class="card">
+        <div class="card-header text-light p-3" style="background-color: teal;">
+            Be a part of Medicare
+        </div>
+        <div class="card-body">
+            <form (submit)="onRegister()">
+                <div>
+                    <!-- <label>Firstname:</label> -->
+                    <input class="form-control form-control-sm" [(ngModel)]="user.firstname" type="text"
+                        placeholder="First Name" name="firstname" required>
+                </div>
+                <br>
+                <div>
+                    <!-- <label>Lastname:</label> -->
+                    <input class="form-control form-control-sm" [(ngModel)]="user.lastname" type="text" name="lastname"
+                        placeholder="Last Name" required>
+                </div>
+                <br>
+                <div>
+                    <!-- <label>Email Id : </label> -->
+                    <input class="form-control form-control-sm" [(ngModel)]="user.emailId" name="emailId" required
+                        placeholder="Email">
+                </div>
+                <br>
+                <div>
+                    <!-- <label>Password:</label> -->
+                    <input class="form-control form-control-sm" type="password" [(ngModel)]="user.password"
+                        placeholder="Password" name="password" required>
+                </div>
+                <br>
+                <div class="ps-2 pe-2 pt-1 pb-1 border">
+                    <label class="form-check-label">Gender :</label>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" [(ngModel)]="user.gender" name="gender"
+                            value="male" required>
+                        Male
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" [(ngModel)]="user.gender" name="gender"
+                            value="female" required> Female
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" [(ngModel)]="user.gender" name="gender"
+                            value="other" required>
+                        Other
+                    </div>
+                </div><br>
+                <div>
+                    <!-- <label>BirthDay:</label> -->
+                    <input class="form-control form-control-sm" [(ngModel)]="user.dateOfBirth" name="dateOfBirth"
+                        placeholder="Date Of BirthDay" type="date" required>
+                </div>
+                <br>
+                <div>
+                    <button class="btn btn-dark btn-sm" type="submit">Register</button>&nbsp;
+                    <button class="btn btn-dark btn-sm" type="reset">Reset</button>
+                </div>
+
+                <div *ngIf="message">
+                    {{ message }}
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+
+
+import { Component } from '@angular/core';
+import { UserService } from '../user.service';
+
+
+@Component({
+  selector: 'app-register',
+  templateUrl: './register.component.html',
+  styleUrls: ['./register.component.css']
+})
+export class RegisterComponent {
+
+  user = {
+    firstname: '',
+    lastname: '',
+    emailId: '',
+    password: '',
+    gender: '',
+    dateOfBirth: ''
+  };
+  message: string = '';
+
+  constructor(private userService: UserService) { }
+
+  onRegister() {
+    this.userService.register(this.user).subscribe({
+      next: (response) => {
+        console.log("User registered!", response);
+        this.message = 'User registered successfully!';
+      },
+      error: (error) => {
+        console.error("Error registering user:", error);
+        this.message = 'Error occurred during registration!';
+      },
+      complete: () => {
+        console.log('Registration request completed.'); // This is optional
+      }
+    });
+  }
+
+}
+
+
+
+
+<!-- <p>updatecategory works!</p> -->
+<br>
+<div class="col-md-7 m-auto">
+    <div class="card">
+        <div class="card-header text-light" style="background-color: teal;">
+            <h4>Update Category</h4>
+        </div>
+        <div class="card-body">
+            <form (ngSubmit)="updateCategory()">
+                <div>
+                    <label>Name:</label>
+                    <input class="form-control" [(ngModel)]="category.name" name="name" required>
+                </div><br>
+                <div>
+                    <label>Description:</label>
+                    <textarea class="form-control" [(ngModel)]="category.description" name="description"
+                        rows="4"></textarea>
+                </div>
+                <br>
+                <button class="btn btn-dark" type="submit">Update Category</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+
+import { Component } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
+import { CategoryService } from '../category.service';
+import { Category } from '../category';
+
+
+@Component({
+  selector: 'app-updatecategory',
+  templateUrl: './updatecategory.component.html',
+  styleUrls: ['./updatecategory.component.css']
+})
+export class UpdatecategoryComponent {
+
+  categoryId!: number;
+  category: Category = {
+    name: '',
+    description: ''
+  };
+
+  constructor(
+    private route: ActivatedRoute,
+    private router: Router,
+    private categoryService: CategoryService
+  ) { }
+
+  ngOnInit(): void {
+    this.categoryId = +this.route.snapshot.paramMap.get('id')!;
+    this.loadCategory();
+  }
+
+  loadCategory(): void {
+    this.categoryService.getCategoryById(this.categoryId).subscribe(data => {
+      this.category = data;
+    });
+  }
+
+  updateCategory(): void {
+    this.categoryService.updateCategory(this.category).subscribe(() => {
+      alert('Category updated successfully!');
+      this.router.navigate(['/categories']);
+    });
+  }
+
+}
+
+
+
+
+<!-- <p>updatemedicine works!</p> -->
+<br>
+<div class="col-md-7 m-auto">
+    <div class="card">
+        <div class="card-header">
+            <h4>Update Medicine</h4>
+        </div>
+        <div class="card-body">
+            <form (ngSubmit)="onSubmit(medicineForm)" #medicineForm="ngForm">
+                <input type="hidden" name="id" [(ngModel)]="medicine.id">
+
+                <div>
+                    <label>Name:</label>
+                    <input class="form-control" type="text" [(ngModel)]="medicine.name" name="name"
+                        [ngModelOptions]="{standalone: true}">
+                </div>
+                <div>
+                    <label>Description:</label>
+                    <textarea class="form-control" type="text" [(ngModel)]="medicine.description" name="description"
+                        cols="4" [ngModelOptions]="{standalone: true}"></textarea>
+                </div>
+                <div>
+                    <label>Brand:</label>
+                    <input class="form-control" type="text" [(ngModel)]="medicine.brand" name="brand"
+                        [ngModelOptions]="{standalone: true}">
+                </div>
+                <div>
+                    <label>Available Quantity:</label>
+                    <input class="form-control" type="number" [(ngModel)]="medicine.availableQuantity"
+                        name="availableQuantity" [ngModelOptions]="{standalone: true}">
+                </div>
+                <div>
+                    <label>Price:</label>
+                    <input class="form-control" type="number" [(ngModel)]="medicine.price" name="price"
+                        [ngModelOptions]="{standalone: true}">
+                </div>
+                <div>
+                    <label>Category:</label>
+                    <select class="form-select" [(ngModel)]="medicine.categoryId" [ngModelOptions]="{standalone: true}">
+                        <option *ngFor="let category of categories" [value]="category.id">{{category.name}}</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Current Image : </label>&nbsp;&nbsp;&nbsp;
+                    <img *ngIf="medicine.image" [src]="medicine.image" alt="Medicine Image" width="200">
+                    <br>
+                    <label>Change Image: </label>
+                    <input class="form-control" type="file" (change)="onImageSelected($event)" name="image">
+                </div><br>
+                <div>
+                    <button class="btn btn-dark" type="submit">Update</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+
+
+import { Component } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
+import { Medicine } from '../medicine';
+import { MedicineService } from '../medicine.service';
+import { Category } from '../category';
+import { CategoryService } from '../category.service';
+
+
+@Component({
+  selector: 'app-updatemedicine',
+  templateUrl: './updatemedicine.component.html',
+  styleUrls: ['./updatemedicine.component.css']
+})
+export class UpdatemedicineComponent {
+
+  medicine: any = {};
+  categories: any[] = [];
+  selectedImage!: File;
+
+  constructor(
+    private medicineService: MedicineService,
+    private route: ActivatedRoute,
+    private router: Router,
+    private categoryService: CategoryService
+  ) { }
+
+  ngOnInit(): void {
+    const id = this.route.snapshot.paramMap.get('id');
+    if (id) {
+      this.loadMedicine(+id);
+    }
+    this.loadCategories();
+  }
+
+  loadMedicine(id: number): void {
+    this.medicineService.getMedicine(id).subscribe(data => {
+      this.medicine = data;
+      if (this.medicine.image) {
+        this.medicine.image = 'data:image/jpeg;base64,' + this.medicine.image;
+      }
+    });
+  }
+
+  loadCategories(): void {
+    this.categoryService.getAllCategories().subscribe(
+      data => {
+        this.categories = data;
+      },
+      error => {
+        console.error('Error loading categories!', error);
+      }
+    );
+  }
+
+
+  onSubmit(form: any) {
+    const formData = new FormData();
+
+    let id = form.value.id;  // Ensure this ID is correctly set
+    if (!id) {
+      console.error("Medicine ID is not set!");
+      return;
+    }
+
+    formData.append('name', form.value.name);
+    formData.append('description', form.value.description);
+    formData.append('brand', form.value.brand);
+    formData.append('availableQuantity', form.value.availableQuantity);
+    formData.append('price', form.value.price);
+    formData.append('categoryId', form.value.categoryId);
+
+    if (form.value.image) {
+      formData.append('image', form.value.image, form.value.image.name);
+    }
+    this.medicineService.updateMedicine(form.value.id, formData).subscribe(
+      response => {
+        console.log('Medicine updated successfully');
+      },
+      error => {
+        console.error('Error updating medicine:', error);
+      }
+    );
+
+  }
+
+
+  onImageSelected(event: any): void {
+    const file: File = event.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e: any) => {
+        this.medicine.image = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+
+ dataURItoBlob(dataURI: string): Blob {
+    const byteString = window.atob(dataURI.split(',')[1]);
+    const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0];
+    const ab = new ArrayBuffer(byteString.length);
+    const ia = new Uint8Array(ab);
+    for (let i = 0; i < byteString.length; i++) {
+      ia[i] = byteString.charCodeAt(i);
+    }
+    return new Blob([ab], { type: mimeString });
+  }
+
+}
+
+
+
+
+<!-- <p>updateuser works!</p> -->
+<br>
+<div class="col-md-6 m-auto">
+    <div class="card">
+        <div class="card-header">
+            <h5>Edit User</h5>
+        </div>
+        <div class="card-body">
+            <form (ngSubmit)="onSubmit()">
+                <div>
+                    First Name:
+                    <input class="form-control" [(ngModel)]="user!.firstname" name="firstname">
+                </div>
+                <div>
+                    Last Name:
+                    <input class="form-control" [(ngModel)]="user.lastname" name="lastname">
+                </div>
+                <div>
+                    User Email:
+                    <input class="form-control" [(ngModel)]="user.emailId" name="emailId">
+                </div>
+                <div>
+                    Gender:
+                    <input class="form-control" [(ngModel)]="user.gender" name="gender">
+                </div>
+                <div>
+                    Date Of Birth:
+                    <input class="form-control" [(ngModel)]="user.dateOfBirth" name="dateOfBirth">
+                </div>
+                <br>
+                <div>
+                    <button class="btn btn-dark" type="submit">Update</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+
+
+import { Component } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
+import { UserService } from '../user.service';
+import { User } from '../user';
+import { Router } from '@angular/router';
+
+
+@Component({
+  selector: 'app-updateuser',
+  templateUrl: './updateuser.component.html',
+  styleUrls: ['./updateuser.component.css']
+})
+export class UpdateuserComponent {
+
+  // constructor(private route: ActivatedRoute) {
+  //   this.route.params.subscribe(params => {
+  //     let id = +params['id'];  // The '+' is a shorthand to convert the string to a number
+  //     // Now you can use the ID to fetch the relevant data or whatever else you need to do
+  //   });
+  // }
+
+
+  user!: User;
+
+  constructor(
+    private userService: UserService,
+    private route: ActivatedRoute,
+    private router: Router
+  ) {
+    this.route.params.subscribe(params => {
+      let id = +params['id'];  // The '+' is a shorthand to convert the string to a number
+      // Now you can use the ID to fetch the relevant data or whatever else you need to do
+    });
+  }
+
+  ngOnInit() {
+    // Get the ID from the route parameter
+    const id = +this.route.snapshot.paramMap.get('id')!;
+
+    // Fetch the user details
+    this.userService.getUserById(id).subscribe(data => {
+      this.user = data;
+    }, error => {
+      console.error('Error fetching user details', error);
+    });
+  }
+
+
+  onSubmit() {
+    this.userService.updateUser(this.user).subscribe(response => {
+      console.log('User updated!', response);
+      alert("User update successfully...!")
+      this.router.navigate(["/viewallusers"])
+    }, error => {
+      console.error('Error updating user', error);
+      alert("User can not be update! Please Try Again...")
+    });
+  }
+}
+
+
+
+<!-- <p>viewallusers works!</p> -->
+<br>
+<div class="container">
+    <div class="card">
+        <div class="card-header">
+            <h4>Users List</h4>
+        </div>
+
+        <div class="card-body">
+            <table class="table table-bordered table-sm text-center table-striped table-hover text-capitalize">
+                <thead class="p-2">
+                    <tr>
+                        <th>Id</th>
+                        <th>First Name</th>
+                        <th>Last Name</th>
+                        <th>Email</th>
+                        <th>Gender</th>
+                        <th>Date Of Birth</th>
+                        <th>Operations</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr *ngFor="let user of users">
+                        <td>{{ user.id }}</td>
+                        <td>{{ user.firstname }}</td>
+                        <td>{{ user.lastname }}</td>
+                        <td>{{ user.emailId }}</td>
+                        <td>{{user.gender}}</td>
+                        <td>{{user.dateOfBirth | date:'mediumDate' }}</td>
+                        <td>
+                            <button class="btn text-white rounded-pill" (click)="viewUser(user.id)"
+                                style="--bs-btn-padding-y: .15rem; --bs-btn-padding-x: .5rem; --bs-btn-font-size: .70rem;background-color: rgb(85, 38, 130);">
+                                View</button>&nbsp;
+                            <button class="btn text-white rounded-pill" (click)="onUpdate(user)"
+                                style="--bs-btn-padding-y: .15rem; --bs-btn-padding-x: .5rem; --bs-btn-font-size: .70rem;background-color: rgb(5, 103, 130);">
+                                Edit</button>&nbsp;
+                            <button class="btn text-white rounded-pill" (click)="onDelete(user.id)"
+                                style="--bs-btn-padding-y: .15rem; --bs-btn-padding-x: .5rem; --bs-btn-font-size: .70rem;background-color:crimson;">
+                                Delete</button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+
+
+import { Component } from '@angular/core';
+import { UserService } from '../user.service';
+import { User } from '../user';
+import { Router } from '@angular/router';
+
+
+@Component({
+  selector: 'app-viewallusers',
+  templateUrl: './viewallusers.component.html',
+  styleUrls: ['./viewallusers.component.css']
+})
+export class ViewallusersComponent {
+
+  users: User[] = [];
+
+  constructor(
+    private userService: UserService,
+    private router: Router
+  ) { }
+
+  ngOnInit() {
+    this.loadUsers();
+    // this.userService.getAllUsers().subscribe(data => {
+    //   this.users = data;
+    // }, error => {
+    //   console.error('Error fetching users', error);
+    // });
+  }
+
+
+  private loadUsers(): void {
+    this.userService.getAllUsers().subscribe(
+      (data: User[]) => {
+        this.users = data;
+      },
+      (error) => {
+        console.error('Error fetching users', error);
+      }
+    );
+  }
+
+
+  viewUser(userId: number) {
+    // Navigate to the view user page
+    this.router.navigate(['/viewuser', userId]);
+  }
+
+
+  onUpdate(user: User) {
+    // Navigate to edit page or open a modal/dialog with the user's data.
+    // Example for navigation:
+    this.router.navigate(['/updateuser', user.id]);
+  }
+
+
+  onDelete(userId: number) {
+    if (confirm("Are you sure you want to delete this user?")) {
+      this.userService.deleteUser(userId).subscribe(
+        () => {
+          this.users = this.users.filter(u => u.id !== userId);
+          alert("Deleted Successfully...!")
+          this.router.navigate(["/viewallusers"]);
+        },
+        error => {
+          console.error("Error deleting user:", error);
+        }
+      );
+    }
+  }
+
+}
+
+
+
+
+<!-- <p>viewmedicine works!</p> -->
+<br>
+
+<div>
+    <div>
+        <form class="col-md-6 d-flex m-auto" role="search">
+            <input class="form-control me-2" type="search" aria-label="Search" name="searchTerm" type="text"
+                placeholder="Search medicines..">
+            <button class="btn text-light" type="submit" style="background-color: rgb(6, 83, 97);">
+                <i class="fa fa-search"></i>
+            </button>
+        </form>
+    </div>
+
+    <h4>Medicine List</h4>
+
+    <table class="table table-bordered text-center text-capitalize">
+        <thead class="text-center">
+            <tr>
+                <th>Image</th>
+                <th>Name</th>
+                <th>Medicine Description</th>
+                <th>Brand</th>
+                <th>Price</th>
+                <th>Category</th>
+                <th>Add/Remove</th>
+                <th>Quntity</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr *ngFor="let medicine of medicines |  paginate:{itemsPerPage:4,currentPage:p}">
+                <td><img [src]="'data:image/jpeg;base64,' + medicine.image" alt="Medicine Image" width="120"></td>
+                <td>{{medicine.name}}</td>
+                <td>{{medicine.description}}</td>
+                <td>{{medicine.brand}}</td>
+                <td>&#8377;{{medicine.price}}/strip</td>
+                <td>{{medicine.category.name}}</td>
+
+                <td class="text-center">
+                    <div class="btn-group">
+                        <button class="btn btn-dark btn-sm" (click)="addToCart(medicine)">
+                            <i class='fas fa-plus'></i>
+                        </button>
+                        <button class="btn btn-danger btn-sm" (click)="removeFromCart(medicine)">
+                            <i class='fas fa-minus'></i>
+                        </button>
+                    </div>
+                </td>
+
+                <td>{{medicine.quantityInCart}}</td>
+            </tr>
+        </tbody>
+    </table>
+    <pagination-controls (pageChange)="p = $event"></pagination-controls>
+
+    <div>
+        <button routerLink="/cart" class="btn btn-dark">Go To Cart</button>
+    </div>
+</div>
+
+
+
+import { Component } from '@angular/core';
+import { Medicine } from '../medicine';
+import { MedicineService } from '../medicine.service';
+import { Router } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
+
+@Component({
+  selector: 'app-viewmedicine',
+  templateUrl: './viewmedicine.component.html',
+  styleUrls: ['./viewmedicine.component.css']
+})
+export class ViewmedicineComponent {
+
+  medicines: Medicine[] = [];
+  categoryName!: string;
+  p!: number;
+  searchTerm: string = '';
+
+  constructor(
+    private medicineService: MedicineService,
+    private route: ActivatedRoute,
+    private router: Router
+  ) { }
+
+  ngOnInit(): void {
+    this.getAllMedicines();
+  }
+
+  getAllMedicines(): void {
+    this.medicineService.getAllMedicines().subscribe(medicines => this.medicines = medicines);
+  }
+
+
+  // Add to cart
+  addToCart(medicine: Medicine) {
+    // medicine.quantityInCart += 1;
+    medicine.quantityInCart = (medicine.quantityInCart || 0) + 1;
+    this.updateLocalStorage();
+  }
+
+  // Remove from cart
+  removeFromCart(medicine: Medicine) {
+    medicine.quantityInCart = medicine.quantityInCart > 0 ? medicine.quantityInCart - 1 : 0;
+    this.updateLocalStorage();
+  }
+
+  updateLocalStorage() {
+    localStorage.setItem('cart', JSON.stringify(this.medicines));
+
+    const storedCart = localStorage.getItem('cart');
+    if (storedCart) {
+      this.medicines = JSON.parse(storedCart);
+    }
+  }
+
+  getMedicineByCategory() {
+    const categoryName = this.route.snapshot.paramMap.get('categoryName')!;
+    this.medicineService.getMedicinesByCategory(categoryName).subscribe(data => {
+      this.medicines = data;
+    });
+  }
+
+
+}
+
+
+
+<!-- <p>viewuser works!</p> -->
+<br>
+<div class="m-auto">
+    <div class="row">
+        <div class="card col-md-5">
+            <div class="card-body" *ngIf="user">
+                <h3>{{ user.firstname }} {{ user.lastname }}</h3>
+                <p>Email: {{ user.emailId }}</p>
+                <p>Gender:{{ user.gender }}</p>
+                <p>Birthday:{{ user.dateOfBirth | date:'mediumDate' }}</p>
+            </div>
+        </div>
+        <br>
+        <br><br>
+        <br>
+        <h4>Your Orders</h4>
+
+        <div class="card-body">
+            <div class="card col-md-5">
+                <div class="card-header">
+                    Date : Oct 9, 2023
+                </div>
+                <div class="card-body">
+                    <h6>Ordered Medicines</h6>
+                    <table class="table table-bordered text-center">
+                        <thead>
+                            <tr>
+                                <th>Medicine</th>
+                                <th>Quantity</th>
+                                <th>Total Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Paracetamol</td>
+                                <td>2</td>
+                                <td>&#8377;40</td>
+                            </tr>
+                            <tr>
+                                <td>Combiflame</td>
+                                <td>2</td>
+                                <td>&#8377;140</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <h6>Total Amount : 180</h6>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+import { Component } from '@angular/core';
+import { UserService } from '../user.service';
+import { ActivatedRoute } from '@angular/router';
+import { User } from '../user';
+
+
+@Component({
+  selector: 'app-viewuser',
+  templateUrl: './viewuser.component.html',
+  styleUrls: ['./viewuser.component.css']
+})
+export class ViewuserComponent {
+
+  user!: User;
+
+  constructor(
+    private userService: UserService,
+    private route: ActivatedRoute
+  ) { }
+
+  ngOnInit() {
+    // Get the ID from the route parameter
+    const id = +this.route.snapshot.paramMap.get('id')!;
+
+    // Fetch the user details
+    this.userService.getUserById(id).subscribe(data => {
+      this.user = data;
+    }, error => {
+      console.error('Error fetching user details', error);
+    });
+  }
+
+
+}
+
+
+
+
+import { NgModule } from '@angular/core';
+import { RouterModule, Routes } from '@angular/router';
+import { LoginComponent } from './login/login.component';
+import { RegisterComponent } from './register/register.component';
+import { HomeComponent } from './home/home.component';
+import { ViewallusersComponent } from './viewallusers/viewallusers.component';
+import { UpdateuserComponent } from './updateuser/updateuser.component';
+import { ViewuserComponent } from './viewuser/viewuser.component';
+import { CategorylistComponent } from './categorylist/categorylist.component';
+import { AddcategoryComponent } from './addcategory/addcategory.component';
+import { UpdatecategoryComponent } from './updatecategory/updatecategory.component';
+import { MedicinelistComponent } from './medicinelist/medicinelist.component';
+import { AddmedicineComponent } from './addmedicine/addmedicine.component';
+import { UpdatemedicineComponent } from './updatemedicine/updatemedicine.component';
+import { ViewmedicineComponent } from './viewmedicine/viewmedicine.component';
+import { AdminhomeComponent } from './adminhome/adminhome.component';
+import { CustomerComponent } from './customer/customer.component';
+import { CartComponent } from './cart/cart.component';
+import { OrderComponent } from './order/order.component';
+
+const routes: Routes = [
+  { path: '', component: HomeComponent },
+  { path: 'home', component: HomeComponent },
+  { path: 'login', component: LoginComponent },
+  { path: 'register', component: RegisterComponent },
+  { path: 'admin', component: AdminhomeComponent },
+  { path: 'customer', component: CustomerComponent },
+  { path: 'viewallusers', component: ViewallusersComponent },
+  { path: 'updateuser/:id', component: UpdateuserComponent },
+  { path: 'viewuser/:id', component: ViewuserComponent },
+  { path: 'categories', component: CategorylistComponent },
+  { path: 'addcategory', component: AddcategoryComponent },
+  { path: 'updatecategory/:id', component: UpdatecategoryComponent },
+  { path: 'medicinelist', component: MedicinelistComponent },
+  { path: 'addmedicine', component: AddmedicineComponent },
+  { path: 'updatemedicine/:id', component: UpdatemedicineComponent },
+  { path: 'viewmedicine', component: ViewmedicineComponent },
+  { path: 'cart', component: CartComponent },
+  { path: 'order', component: OrderComponent }
+];
+
+@NgModule({
+  imports: [RouterModule.forRoot(routes)],
+  exports: [RouterModule]
+})
+export class AppRoutingModule { }
+
+
+
+<div class="container">
+    <nav class="navbar navbar-expand-lg text-light navbar-dark" style=" background-color:teal;">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">
+                <i class='fas fa-clinic-medical pe-3'></i>MediCare</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+                data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false"
+                aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarSupportedContent">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link active" routerLink="/">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" routerLink="">About</a>
+                    </li>
+                </ul>
+
+                <ul class="navbar-nav justify-content-end">
+                    <li class="nav-item">
+                        <a class="nav-link active" routerLink="/register">Signup</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" routerLink="/login">Signin</a>
+                    </li>
+                    <li class="nav-item" *ngif="authservice.isLoggedin()">
+                        <a class="nav-link active" routerLink="/login">Cart</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- ================================================ -->
+    <!-- side nav -->
+    <div class="container-fluid" style="width: 100%;">
+        <div class="row">
+            <div class="col-md-2 p-2 overflow-auto">
+                <div class="col-md-10 sidenav">
+                    <div class="list-group list-group-flush list-group-no-border list-group-sm fs-6">
+                        <h5>Categories</h5>
+                        <a routerLink="viewmedicine" class="list-group-item list-group-item-action">All Medicines</a>
+                        <a routerLink="#" class="list-group-item list-group-item-action"
+                            *ngFor="let category of categories" [attr.data-name]="category.name">{{category.name}}</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========================================== -->
+
+            <div class="outlet col-md-10">
+                <div class="col-md-12">
+                    <router-outlet></router-outlet>
+                    <ul>
+                        <li *ngFor="let medicine of medicinesList">{{ medicine.name }}</li>
+                    </ul>
+                </div>
+            </div>
+            <!-- ========================================== -->
+        </div>
+    </div>
+</div>
+
+
+
+import { Component } from '@angular/core';
+import { CategoryService } from './category.service';
+import { Router } from '@angular/router';
+import { Category } from './category';
+import { MedicineService } from './medicine.service';
+import { Medicine } from './medicine';
+
+@Component({
+  selector: 'app-root',
+  templateUrl: './app.component.html',
+  styleUrls: ['./app.component.css']
+})
+export class AppComponent {
+  title = 'Medicare';
+
+  // To get all categories
+  categories: Category[] = [];
+
+  medicinesList: any[] = [];
+  selectedCategory: string = '';
+
+
+  constructor(
+    private categoryService: CategoryService,
+    private medicineService: MedicineService,
+    private router: Router
+  ) { }
+
+  ngOnInit(): void {
+    this.loadCategories();
+  }
+
+  loadCategories(): void {
+    this.categoryService.getAllCategories().subscribe(data => {
+      this.categories = data;
+      console.log(data);
+    });
+  }
+
+  getMedicinesByCategory() {
+    this.medicineService.getMedicinesByCategory(this.selectedCategory).subscribe(medicines => {
+      this.medicinesList = medicines;
+    });
+  }
+
+}
+
+
+
+
+import { NgModule } from '@angular/core';
+import { BrowserModule } from '@angular/platform-browser';
+
+import { AppRoutingModule } from './app-routing.module';
+import { AppComponent } from './app.component';
+import { NgbModule } from '@ng-bootstrap/ng-bootstrap';
+
+import { FormsModule } from '@angular/forms';
+import { HttpClientModule } from '@angular/common/http';
+import { RegisterComponent } from './register/register.component';
+import { LoginComponent } from './login/login.component';
+import { HomeComponent } from './home/home.component';
+import { ViewallusersComponent } from './viewallusers/viewallusers.component';
+import { UpdateuserComponent } from './updateuser/updateuser.component';
+import { ViewuserComponent } from './viewuser/viewuser.component';
+import { AdminhomeComponent } from './adminhome/adminhome.component';
+import { CategorylistComponent } from './categorylist/categorylist.component';
+import { AddcategoryComponent } from './addcategory/addcategory.component';
+import { UpdatecategoryComponent } from './updatecategory/updatecategory.component';
+import { AddmedicineComponent } from './addmedicine/addmedicine.component';
+import { UpdatemedicineComponent } from './updatemedicine/updatemedicine.component';
+import { MedicinelistComponent } from './medicinelist/medicinelist.component';
+import { ViewmedicineComponent } from './viewmedicine/viewmedicine.component';
+import { CustomerComponent } from './customer/customer.component';
+import { CartComponent } from './cart/cart.component'
+
+import { NgxPaginationModule } from 'ngx-pagination';
+import { OrderComponent } from './order/order.component';
+
+
+@NgModule({
+  declarations: [
+    AppComponent,
+    RegisterComponent,
+    LoginComponent,
+    HomeComponent,
+    ViewallusersComponent,
+    UpdateuserComponent,
+    ViewuserComponent,
+    AdminhomeComponent,
+    CategorylistComponent,
+    AddcategoryComponent,
+    UpdatecategoryComponent,
+    AddmedicineComponent,
+    UpdatemedicineComponent,
+    MedicinelistComponent,
+    ViewmedicineComponent,
+    CustomerComponent,
+    CartComponent,
+    OrderComponent
+  ],
+  imports: [
+    BrowserModule,
+    AppRoutingModule,
+    NgbModule,
+    FormsModule,
+    HttpClientModule,
+    NgxPaginationModule
+  ],
+  providers: [],
+  bootstrap: [AppComponent]
+})
+export class AppModule { }
+
+
+
+import { HttpClient, HttpParams } from '@angular/common/http';
+import { Injectable } from '@angular/core';
+import { Observable, catchError, tap, throwError } from 'rxjs';
+import { User } from './user';
+import { Router } from '@angular/router';
+
+
+@Injectable({
+  providedIn: 'root'
+})
+export class AuthService {
+
+  private apiURL = 'http://localhost:9090/user';
+
+  isLoggedIn = false;
+
+  constructor(
+    private http: HttpClient,
+    private router: Router
+  ) { }
+
+
+  login(email: string, password: string): Observable<any> {
+    const body = {
+      emailId: email,
+      password: password
+    };
+    return this.http.post<any>(`${this.apiURL}/login`, body).pipe(
+      tap(response => {
+        if (response.role === 'admin') {
+          this.router.navigate(['/admin']);
+        } else if (response.role === 'customer') {
+          this.router.navigate(['/customer']);
+        }
+      }),
+      catchError(error => {
+        return throwError(error);
+      })
+    );
+  }
+
+
+  getCurrentUser(): Observable<any> {
+    return this.http.get(`${this.apiURL}/current`);
+  }
+
+  logout(): Observable<any> {
+    this.isLoggedIn = false;
+    return this.http.get(`${this.apiURL}/logout`);
+  }
+
+}
+
+
+
+
+import { HttpClient } from '@angular/common/http';
+import { Injectable } from '@angular/core';
+import { BehaviorSubject, Observable } from 'rxjs';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class CartService {
+
+  private staticUser = {
+    id: 1,
+    name: 'Shubham Pra',
+    email: 'sp@example.com'
+  };
+
+  private cartItems: any[] = [];
+  private cartSubject = new BehaviorSubject(this.cartItems);
+  readonly cart$ = this.cartSubject.asObservable();
+
+  private api = 'http://localhost:9090/cart';
+
+  constructor(private http: HttpClient) { }
+
+  addToCart(item: any, quantity: number = 1) {
+    const existingItem = this.cartItems.find(cartItem => cartItem.medicine.id === item.id);
+    if (existingItem) {
+      existingItem.quantity += quantity;
+    } else {
+      this.cartItems.push({ medicine: item, quantity });
+    }
+    this.cartSubject.next(this.cartItems);
+  }
+
+  removeFromCart(item: any) {
+    const index = this.cartItems.findIndex(cartItem => cartItem.medicine.id === item.id);
+    if (index > -1) {
+      this.cartItems.splice(index, 1);
+      this.cartSubject.next(this.cartItems);
+    }
+  }
+
+  // Communicate with backend
+  saveCart(): Observable<any> {
+    const cartData = {
+      userId: this.staticUser.id,
+      items: this.cartItems
+    };
+    return this.http.post(`${this.api}/add`, cartData);
+  }
+
+  placeOrder(): Observable<any> {
+    const orderData = {
+      userId: this.staticUser.id,
+      items: this.cartItems
+    };
+    return this.http.post(`${this.api}/order/place`, orderData);
+  }
+
+}
+
+
+
+import { Medicine } from "./medicine";
+import { User } from "./user";
+
+export class Cart {
+    id!: number;
+    medicine!: Medicine;
+    userid!:User;
+}
+
+
+export class Order {
+    id!: number;
+    totalAmount!: number;
+    date!: Date;
+}
+
+
+
+import { Injectable } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Category } from './category';
+import { Observable } from 'rxjs';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class CategoryService {
+
+  private api = 'http://localhost:9090/categories';
+
+  constructor(
+    private http: HttpClient
+  ) { }
+
+
+  getAllCategories(): Observable<Category[]> {
+    return this.http.get<Category[]>(`${this.api}/categories`);
+  }
+
+  addCategory(category: Category): Observable<Category> {
+    return this.http.post<Category>(this.api, category);
+  }
+
+  updateCategory(category: Category): Observable<Category> {
+    return this.http.put<Category>(`${this.api}/${category.id}`, category);
+  }
+
+  deleteCategory(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.api}/${id}`);
+  }
+
+  getCategoryById(id: number): Observable<Category> {
+    return this.http.get<Category>(`${this.api}/${id}`);
+  }
+
+
+}
+
+
+
+export interface Category {
+    id?: number;
+    name: string;
+    description?: string;
+}
+
+
+
+import { Injectable } from '@angular/core';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { Medicine } from './medicine';
+import { Observable } from 'rxjs';
+
+
+@Injectable({
+  providedIn: 'root'
+})
+export class MedicineService {
+
+  private api = 'http://localhost:9090/medicines';
+
+  constructor(
+    private http: HttpClient
+  ) { }
+
+
+  addMedicine(formData: FormData): Observable<Medicine> {
+    return this.http.post<Medicine>(`${this.api}`, formData);
+  }
+
+
+  getMedicine(id: number): Observable<Medicine> {
+    return this.http.get<Medicine>(`${this.api}/${id}`);
+  }
+
+
+  getAllMedicines(): Observable<Medicine[]> {
+    return this.http.get<Medicine[]>(`${this.api}`);
+  }
+
+  updateMedicine(id: number, formData: FormData): Observable<any> {
+    return this.http.put(`${this.api}/${id}`, formData);
+  }
+
+
+  getCategories(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.api}/categories`);
+  }
+
+  deleteMedicine(id: number): Observable<any> {
+    return this.http.delete(`${this.api}/${id}`);
+  }
+
+
+  uploadImage(medicineId: number, imageFile: File): Observable<any> {
+    const formData = new FormData();
+    formData.append('image', imageFile);
+
+    return this.http.post(`${this.api}/${medicineId}/upload`, formData);
+  }
+
+
+  getMedicinesByCategory(categoryName: string): Observable<Medicine[]> {
+    return this.http.get<Medicine[]>(`${this.api}/category/${categoryName}`);
+  }
+
+}
+
+
+
+import { Category } from "./category";
+
+export class Medicine {
+    id?: number;
+    name!: string;
+    description!: string;
+    brand!: string;
+    availableQuantity!: number;
+    price!: number;
+    category!: Category;
+    isActive!: boolean;
+    image?: any;
+
+    // For cart
+    quantityInCart: number = 0;
+
+}
+
+
+
+import { HttpClient } from '@angular/common/http';
+import { Injectable } from '@angular/core';
+import { Observable } from 'rxjs';
+import { Order } from './cart';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class OrderService {
+  private api = 'http://localhost:9090/order';
+
+  constructor(private http: HttpClient) { }
+
+  placeOrder(orderItems: any[]): Observable<any> {
+    return this.http.post(`${this.api}/place`, { items: orderItems });
+  }
+
+  getSuccessfulOrders(userId: number): Observable<Order[]> {
+    return this.http.get<Order[]>(`${this.api}/orders?userId=${userId}&status=success`);
+  }
+}
+
+
+
+import { Injectable } from '@angular/core';
+import { HttpClient, HttpEvent, HttpRequest } from '@angular/common/http';
+import { Observable } from 'rxjs';
+import { User } from './user';
+
+
+@Injectable({
+  providedIn: 'root'
+})
+export class UserService {
+
+  constructor(
+    private http: HttpClient
+  ) { }
+
+  private apiurl = 'http://localhost:9090/user';
+
+
+  register(user: any) {
+    return this.http.post(`${this.apiurl}/register`, user);
+  }
+
+  getAllUsers(): Observable<any> {
+    return this.http.get<User[]>(`${this.apiurl}/viewallusers`);
+  }
+
+  deleteUser(userId: number): Observable<void> {
+    return this.http.delete<void>(`${this.apiurl}/${userId}`);
+  }
+
+  getUserById(id: number): Observable<User> {
+    return this.http.get<User>(`${this.apiurl}/${id}`);
+  }
+
+  updateUser(user: User): Observable<User> {
+    return this.http.put<User>(`${this.apiurl}/${user.id}`, user);
+  }
+
+  getCurrentUser(): Observable<User> {
+    return this.http.get<User>(`${this.apiurl}/current`, { withCredentials: true });
+  }
+
+}
+
+
+
+
+export interface User {
+    id: number;
+    firstname: string;
+    lastname: string;
+    emailId: string;
+    password: string;
+    gender: string;
+    dateOfBirth: Date;
+    role: 'admin' | 'customer';
+}
